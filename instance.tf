@@ -1,5 +1,5 @@
 
-# Below resource is to create public key
+#Below resource is to create public key
 
 resource "tls_private_key" "sskeygen_execution" {
   algorithm = "RSA"
@@ -10,25 +10,24 @@ resource "tls_private_key" "sskeygen_execution" {
 # Below are the aws key pair
 resource "aws_key_pair" "prometheus_key_pair" {
   depends_on = ["tls_private_key.sskeygen_execution"]
-  key_name   = "${var.aws_public_key_name}"
-  public_key = "${tls_private_key.sskeygen_execution.public_key_openssh}"
+  key_name   = var.aws_public_key_name
+  public_key = tls_private_key.sskeygen_execution.public_key_openssh
 }
 
 
 # prometheus instance
 resource "aws_instance" "prometheus_instance" {
-  ami               = "${lookup(var.aws_amis, var.aws_region)}"
-  instance_type     = "${var.aws_instance_type}"
-  availability_zone = "${var.aws_availability_zone}"
-
-  key_name               = "${aws_key_pair.prometheus_key_pair.id}"
+  ami               = "ami-09135e71dc2619458"#"ami-0823b5cf95e3271bd"#"${lookup(var.aws_amis, var.aws_region)}"
+  instance_type     = var.aws_instance_type
+  availability_zone =  "us-east-2a"#var.aws_availability_zone
+  associate_public_ip_address = true
+  key_name               =  aws_key_pair.prometheus_key_pair.key_name
   vpc_security_group_ids = ["${aws_security_group.prometheus_security_group.id}"]
-  subnet_id              = "${aws_subnet.prometheus_subnet.id}"
-
+  subnet_id              = "subnet-0ec7f6f0c0fd1919b"
   connection {
     user        = "ubuntu"
     host = self.public_ip
-    private_key = "${tls_private_key.sskeygen_execution.private_key_pem}"
+    private_key = tls_private_key.sskeygen_execution.private_key_pem
   }
 
 # Copy the prometheus file to instance
@@ -36,6 +35,10 @@ resource "aws_instance" "prometheus_instance" {
     source      = "./prometheus.yml"
     destination = "/tmp/prometheus.yml"
   }
+ provisioner "local-exec" {
+    command = "echo '${tls_private_key.sskeygen_execution.private_key_pem}' >> ${aws_key_pair.prometheus_key_pair.id}.pem "
+  }
+
 # Install docker in the ubuntu
   provisioner "remote-exec" {
     inline = [
@@ -54,9 +57,8 @@ resource "aws_instance" "prometheus_instance" {
 
     ]
   }
-  provisioner "local-exec" {
-    command = "echo '${tls_private_key.sskeygen_execution.private_key_pem}' >> ${aws_key_pair.prometheus_key_pair.id}.pem ; chmod 400 ${aws_key_pair.prometheus_key_pair.id}.pem"
-  }
+  #provisioner "local-exec" {
+    #command = "echo '${tls_private_key.sskeygen_execution.private_key_pem}' >> ${aws_key_pair.prometheus_key_pair.id}.pem ;  chmod 400 ${aws_key_pair.prometheus_key_pair.id}.pem"
 
   tags = {
     Name = "${var.name}_instance"
